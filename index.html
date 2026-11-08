@@ -376,6 +376,12 @@
   document.querySelectorAll('.reveal').forEach(el => io.observe(el));
 
   const leadForm = document.getElementById('leadForm');
+  // Produccion estatica (GitHub Pages): /api/lead solo existe con serve_site.py local.
+  // Para recibir leads sin servidor, configura LEAD_ENDPOINT con un servicio gratuito
+  // (p.ej. https://formsubmit.co/ajax/TU-EMAIL tras activarlo con un primer envio).
+  // Mientras LEAD_ENDPOINT sea '' en produccion, el lead NO se envia a ningun servidor:
+  // se guarda solo en el navegador (localStorage) y la web lo indica. No se simula el envio.
+  const LEAD_ENDPOINT = '';
   if (leadForm) {
     leadForm.addEventListener('submit', async (ev) => {
       ev.preventDefault();
@@ -400,12 +406,25 @@
         },
         meta: { form: 'lead_capture', consent: true, source: utmSource }
       };
+      const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      const endpoint = isLocal ? '/api/lead' : (LEAD_ENDPOINT || '');
+      if (!endpoint) {
+        try {
+          const prev = JSON.parse(localStorage.getItem('dtt_leads') || '[]');
+          prev.push({ ...payload, ts: new Date().toISOString() });
+          localStorage.setItem('dtt_leads', JSON.stringify(prev));
+        } catch (e) {}
+        leadForm.innerHTML = '<div class="lead-ok">Tu solicitud quedó guardada solo en este navegador. Para recibir el email de seguimiento, falta configurar el endpoint de captura (ver instrucciones). Puedes ver el programa abajo.</div>';
+        return;
+      }
       try {
-        const r = await fetch('/api/lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        const r = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(payload) });
         if (r.ok) {
           leadForm.innerHTML = '<div class="lead-ok">¡Listo! Revisa tu correo: te enviamos la guía y la información sobre el programa. Responde a ese email con cualquier duda. Puedes darte de baja cuando quieras.</div>';
+        } else {
+          leadForm.innerHTML = '<div class="lead-ok">Hubo un error al enviar. Inténtalo de nuevo en unos minutos o escríbenos por el canal habitual.</div>';
         }
-      } catch (e) { /* sin conexion local: el lead no se registra */ }
+      } catch (e) { /* sin conexion: el lead no se registra */ }
     });
   }
 </script>
