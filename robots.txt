@@ -1,0 +1,6 @@
+User-agent: *
+Allow: /
+Disallow: /go
+Disallow: /api/
+
+Sitemap: https://josephhuete57-sudo.github.io/descubre-tu-talento/sitemap.xml
