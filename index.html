@@ -331,13 +331,14 @@
       <div class="eyebrow">Antes de comprar</div>
       <h2 class="serif">Antes de comprar, descubre si esto eres tú</h2>
       <p class="lead-sub">Déjanos tu email y te enviamos la guía práctica sobre cómo descubrir tu talento, junto con la información sobre el programa. Sin spam: contenido útil y la oferta cuando abra el acceso. Puedes darte de baja cuando quieras.</p>
-      <form class="lead-form" id="leadForm" action="/api/lead" method="POST" data-ajax="1">
+      <form class="lead-form" id="leadForm" action="https://formsubmit.co/ajax/josephhuete57@gmail.com" method="POST" data-ajax="1" novalidate>
+        <input type="text" name="name" placeholder="Tu nombre" required autocomplete="name" style="width:100%;padding:15px 18px;border-radius:14px;border:1px solid var(--line);background:var(--cream);font-size:15px;color:var(--ink);font-family:inherit;box-sizing:border-box">
         <input type="email" name="email" placeholder="tu@correo.com" required>
         <input type="hidden" name="utm_source" value="">
         <input type="hidden" name="utm_medium" value="">
         <input type="hidden" name="utm_campaign" value="">
         <label class="lead-consent"><input type="checkbox" name="consent" required> Quiero recibir información y ofertas sobre el programa por este medio. Puedes darte de baja cuando quieras.</label>
-        <button class="btn" type="submit">Quiero recibir más información →</button>
+        <button class="btn" type="submit" id="leadSubmitBtn">Quiero recibir más información →</button>
       </form>
       <div class="guarantee">🔒 Consentimiento explícito para el seguimiento. Sin spam. Tus datos se usan solo para este seguimiento.</div>
     </div>
@@ -376,55 +377,75 @@
   document.querySelectorAll('.reveal').forEach(el => io.observe(el));
 
   const leadForm = document.getElementById('leadForm');
-  // Produccion estatica (GitHub Pages): /api/lead solo existe con serve_site.py local.
-  // Para recibir leads sin servidor, configura LEAD_ENDPOINT con un servicio gratuito
-  // (p.ej. https://formsubmit.co/ajax/TU-EMAIL tras activarlo con un primer envio).
-  // Mientras LEAD_ENDPOINT sea '' en produccion, el lead NO se envia a ningun servidor:
-  // se guarda solo en el navegador (localStorage) y la web lo indica. No se simula el envio.
-  const LEAD_ENDPOINT = '';
+  // Produccion estatica (GitHub Pages): endpoint gratuito FormSubmit hacia josephhuete57@gmail.com.
+  // Primera submission: FormSubmit envia un email de ACTIVACION a esa direccion; hay que pulsar
+  // el enlace de confirmacion para que los leads empiecen a llegar de verdad.
+  const FORM_RECEIVER = 'josephhuete57@gmail.com';
+  const LEAD_ENDPOINT = 'https://formsubmit.co/ajax/' + FORM_RECEIVER;
+  let leadSending = false;
   if (leadForm) {
+    const btn = document.getElementById('leadSubmitBtn');
     leadForm.addEventListener('submit', async (ev) => {
       ev.preventDefault();
+      if (leadSending) return; // proteccion contra duplicados
       const consentEl = leadForm.querySelector('input[name="consent"]');
       const consent = consentEl ? consentEl.checked : false;
       if (!consent) { alert('Debes aceptar el consentimiento para continuar con el seguimiento.'); return; }
+      const nameEl = leadForm.querySelector('input[name="name"]');
+      const emailEl = leadForm.querySelector('input[name="email"]');
+      const name = (nameEl ? nameEl.value : '').trim();
+      const email = (emailEl ? emailEl.value : '').trim();
+      if (!name) { alert('Introduce tu nombre.'); nameEl.focus(); return; }
+      if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) { alert('Introduce un email válido.'); emailEl.focus(); return; }
+      leadSending = true;
+      if (btn) { btn.disabled = true; btn.textContent = 'Enviando…'; }
       const fd = new FormData(leadForm);
       const q = new URLSearchParams(location.search);
       const utmSource = (fd.get('utm_source') || q.get('utm_source') || '').toString();
-      const payload = {
+      const utmMedium = (fd.get('utm_medium') || q.get('utm_medium') || '').toString();
+      const utmCampaign = (fd.get('utm_campaign') || q.get('utm_campaign') || '').toString();
+      const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      // Payload local (dashboard /api/lead)
+      const localPayload = {
         type: 'lead',
         visitor_id: (q.get('vid') || '').toString(),
         session_id: '',
         page: '/guia',
-        email: (fd.get('email') || '').toString().trim(),
+        name: name,
+        email: email,
         consent: true,
         referrer: document.referrer || '',
-        utm: {
-          utm_source: utmSource,
-          utm_medium: (fd.get('utm_medium') || q.get('utm_medium') || '').toString(),
-          utm_campaign: (fd.get('utm_campaign') || q.get('utm_campaign') || '').toString()
-        },
+        utm: { utm_source: utmSource, utm_medium: utmMedium, utm_campaign: utmCampaign },
         meta: { form: 'lead_capture', consent: true, source: utmSource }
       };
-      const isLocal = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
-      const endpoint = isLocal ? '/api/lead' : (LEAD_ENDPOINT || '');
-      if (!endpoint) {
-        try {
-          const prev = JSON.parse(localStorage.getItem('dtt_leads') || '[]');
-          prev.push({ ...payload, ts: new Date().toISOString() });
-          localStorage.setItem('dtt_leads', JSON.stringify(prev));
-        } catch (e) {}
-        leadForm.innerHTML = '<div class="lead-ok">Tu solicitud quedó guardada solo en este navegador. Para recibir el email de seguimiento, falta configurar el endpoint de captura (ver instrucciones). Puedes ver el programa abajo.</div>';
-        return;
-      }
+      // Payload FormSubmit (produccion): name/email/message + _subject/_captcha
+      const formPayload = {
+        name: name,
+        email: email,
+        message: 'Nombre: ' + name + '\nEmail: ' + email + '\nConsentimiento: sí (checkbox marcado)\nOrigen: ' + (utmSource || document.referrer || 'directo') + '\nPágina: /guia\nFecha: ' + new Date().toISOString() + '\n\nNuevo prospecto para Descubre Tu Talento.',
+        _subject: 'Nuevo prospecto — Descubre Tu Talento (web)',
+        _template: 'table',
+        _captcha: 'false',
+        _replyto: email
+      };
+      const endpoint = isLocal ? '/api/lead' : LEAD_ENDPOINT;
+      const body = isLocal ? localPayload : formPayload;
       try {
-        const r = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(payload) });
+        const r = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', 'Accept': 'application/json' }, body: JSON.stringify(body) });
         if (r.ok) {
+          // En local tambien guarda el evento en el panel (no bloqueante)
+          if (isLocal) { try { await fetch('/api/lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(localPayload) }); } catch (e) {} }
           leadForm.innerHTML = '<div class="lead-ok">¡Listo! Revisa tu correo: te enviamos la guía y la información sobre el programa. Responde a ese email con cualquier duda. Puedes darte de baja cuando quieras.</div>';
         } else {
-          leadForm.innerHTML = '<div class="lead-ok">Hubo un error al enviar. Inténtalo de nuevo en unos minutos o escríbenos por el canal habitual.</div>';
+          leadForm.innerHTML = '<div class="lead-ok">Hubo un error al enviar (' + r.status + '). Inténtalo de nuevo en unos minutos. Si es la primera vez, puede que falte activar el endpoint en josephhuete57@gmail.com.</div>';
+          if (btn) { btn.disabled = false; btn.textContent = 'Quiero recibir más información →'; }
+          leadSending = false;
         }
-      } catch (e) { /* sin conexion: el lead no se registra */ }
+      } catch (e) {
+        leadForm.innerHTML = '<div class="lead-ok">Sin conexión o error de red. Inténtalo de nuevo.</div>';
+        if (btn) { btn.disabled = false; btn.textContent = 'Quiero recibir más información →'; }
+        leadSending = false;
+      }
     });
   }
 </script>
