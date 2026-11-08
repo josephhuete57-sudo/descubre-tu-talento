@@ -131,6 +131,18 @@
   .final h2{max-width:760px;margin:0 auto 18px}
   .final p{color:var(--muted);max-width:580px;margin:0 auto 32px;font-size:17px}
 
+  .lead-sec{background:var(--cream);padding:76px 0}
+  .lead-box{max-width:720px;margin:0 auto;background:#fff;border:1px solid var(--line);border-radius:26px;padding:40px;box-shadow:var(--shadow)}
+  .lead-box h2.serif{font-size:clamp(26px,3vw,38px);line-height:1.12;margin-bottom:12px}
+  .lead-box .lead-sub{color:var(--muted);font-size:16px;line-height:1.7;margin-bottom:24px}
+  .lead-form{display:grid;gap:12px;margin-top:8px}
+  .lead-form input[type=email]{width:100%;padding:15px 18px;border-radius:14px;border:1px solid var(--line);background:var(--cream);font-size:15px;color:var(--ink);font-family:inherit;box-sizing:border-box}
+  .lead-form input[type=email]:focus{outline:2px solid var(--amber-2);border-color:transparent}
+  .lead-consent{display:flex;gap:10px;align-items:flex-start;font-size:13px;color:var(--muted);line-height:1.5}
+  .lead-consent input{margin-top:3px;accent-color:var(--forest)}
+  .lead-form .btn{justify-self:stretch}
+  .lead-ok{margin-top:18px;background:var(--cream-2);border:1px solid var(--line);border-radius:14px;padding:16px 18px;font-size:15px;color:var(--forest)}
+
   footer{background:var(--ink);color:#a99f90;padding:48px 0;font-size:13.5px;text-align:center}
   footer .fl{display:flex;justify-content:center;gap:26px;margin-bottom:18px;flex-wrap:wrap}
   footer a:hover{color:#fff}
@@ -313,6 +325,25 @@
   </div>
 </section>
 
+<section class="lead-sec" id="guia">
+  <div class="wrap">
+    <div class="lead-box reveal">
+      <div class="eyebrow">Antes de comprar</div>
+      <h2 class="serif">Antes de comprar, descubre si esto eres tú</h2>
+      <p class="lead-sub">Déjanos tu email y te enviamos la guía práctica sobre cómo descubrir tu talento, junto con la información sobre el programa. Sin spam: contenido útil y la oferta cuando abra el acceso. Puedes darte de baja cuando quieras.</p>
+      <form class="lead-form" id="leadForm" action="/api/lead" method="POST" data-ajax="1">
+        <input type="email" name="email" placeholder="tu@correo.com" required>
+        <input type="hidden" name="utm_source" value="">
+        <input type="hidden" name="utm_medium" value="">
+        <input type="hidden" name="utm_campaign" value="">
+        <label class="lead-consent"><input type="checkbox" name="consent" required> Quiero recibir información y ofertas sobre el programa por este medio. Puedes darte de baja cuando quieras.</label>
+        <button class="btn" type="submit">Quiero recibir más información →</button>
+      </form>
+      <div class="guarantee">🔒 Consentimiento explícito para el seguimiento. Sin spam. Tus datos se usan solo para este seguimiento.</div>
+    </div>
+  </div>
+</section>
+
 <section class="final">
   <div class="wrap">
     <h2 class="serif reveal">Tu talento ya existe. Lo que falta es dirección.</h2>
@@ -343,6 +374,40 @@
     entries.forEach(e => { if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
   }, { threshold: 0.12 });
   document.querySelectorAll('.reveal').forEach(el => io.observe(el));
+
+  const leadForm = document.getElementById('leadForm');
+  if (leadForm) {
+    leadForm.addEventListener('submit', async (ev) => {
+      ev.preventDefault();
+      const consentEl = leadForm.querySelector('input[name="consent"]');
+      const consent = consentEl ? consentEl.checked : false;
+      if (!consent) { alert('Debes aceptar el consentimiento para continuar con el seguimiento.'); return; }
+      const fd = new FormData(leadForm);
+      const q = new URLSearchParams(location.search);
+      const utmSource = (fd.get('utm_source') || q.get('utm_source') || '').toString();
+      const payload = {
+        type: 'lead',
+        visitor_id: (q.get('vid') || '').toString(),
+        session_id: '',
+        page: '/guia',
+        email: (fd.get('email') || '').toString().trim(),
+        consent: true,
+        referrer: document.referrer || '',
+        utm: {
+          utm_source: utmSource,
+          utm_medium: (fd.get('utm_medium') || q.get('utm_medium') || '').toString(),
+          utm_campaign: (fd.get('utm_campaign') || q.get('utm_campaign') || '').toString()
+        },
+        meta: { form: 'lead_capture', consent: true, source: utmSource }
+      };
+      try {
+        const r = await fetch('/api/lead', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+        if (r.ok) {
+          leadForm.innerHTML = '<div class="lead-ok">¡Listo! Revisa tu correo: te enviamos la guía y la información sobre el programa. Responde a ese email con cualquier duda. Puedes darte de baja cuando quieras.</div>';
+        }
+      } catch (e) { /* sin conexion local: el lead no se registra */ }
+    });
+  }
 </script>
 </body>
 </html>
